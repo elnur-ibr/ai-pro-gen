@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
+use OpenAI\Laravel\Facades\OpenAI;
 
 class VisualizationController extends Controller
 {
@@ -28,15 +29,25 @@ class VisualizationController extends Controller
 
     private function callAIService(string $prompt): string
     {
-        // Mock implementation - replace with actual AI service integration
-        // You can integrate with OpenAI, Claude, or any other AI service here
-        
-        return "Process Visualization for: \"$prompt\"\n\n" .
-               "1. Start: Input received\n" .
-               "2. Process: Analyze requirements\n" .
-               "3. Decision: Validate criteria\n" .
-               "4. Action: Execute workflow\n" .
-               "5. End: Output delivered\n\n" .
-               "This is a mock visualization. Integrate with your AI service to generate actual process diagrams.";
+        try {
+            $result = OpenAI::chat()->create([
+                'model' => 'gpt-3.5-turbo',
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'You are a process visualization expert. Create a clear, step-by-step process diagram based on the user\'s prompt. Format your response as a structured list with numbered steps.'
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt
+                    ]
+                ],
+                'max_tokens' => 500,
+            ]);
+
+            return $result->choices[0]->message->content;
+        } catch (\Exception $e) {
+            return "Error generating visualization: " . $e->getMessage();
+        }
     }
 }
