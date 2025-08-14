@@ -6,8 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import AppLayout from '@/layouts/app-layout';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/react';
-import { useState, useMemo } from 'react';
-import { StartShape, ProcessShape, DecisionShape, EndShape, Arrow } from '@/components/process-shapes';
+import { useState, useRef, useEffect } from 'react';
+import { ProcessCanvas } from '@/components/process-canvas';
 
 interface ProcessStep {
     processStepId: string;
@@ -81,6 +81,8 @@ export default function ProcessVisualization() {
     const [isLoading, setIsLoading] = useState(false);
     const [response, setResponse] = useState('');
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+    const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+    const glowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -175,7 +177,17 @@ export default function ProcessVisualization() {
             .filter(id => id.trim() !== ''); // Only include steps with IDs
     };
 
-    const handleDragStart = (index: number) => {
+    const handleDragStart = (index: number, e: React.DragEvent) => {
+        // Only allow drag if initiated from drag handle or row background
+        const target = e.target as HTMLElement;
+        const isDragHandle = target.closest('.drag-handle');
+        const isInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'BUTTON';
+        
+        if (!isDragHandle && isInput) {
+            e.preventDefault();
+            return;
+        }
+        
         setDraggedIndex(index);
     };
 
@@ -208,86 +220,31 @@ export default function ProcessVisualization() {
         setDraggedIndex(null);
     };
 
-    const visualizationData = useMemo(() => {
-        if (processSteps.length === 0) return null;
-
-        const positions: { [key: string]: { x: number; y: number; width: number; height: number } } = {};
-        const connections: Array<{ from: string; to: string; label?: string }> = [];
-        
-        const shapeWidth = 140;
-        const shapeHeight = 80;
-        const horizontalSpacing = 200;
-        const verticalSpacing = 120;
-        
-        processSteps.forEach((step, index) => {
-            const row = Math.floor(index / 3);
-            const col = index % 3;
-            
-            positions[step.processStepId] = {
-                x: col * horizontalSpacing + 50,
-                y: row * verticalSpacing + 50,
-                width: shapeWidth,
-                height: shapeHeight
-            };
-            
-            step.nextStepIds.forEach((nextId, nextIndex) => {
-                const label = step.shapeType === 'Decision' && step.decisionLabels[nextIndex] 
-                    ? step.decisionLabels[nextIndex] 
-                    : undefined;
-                connections.push({
-                    from: step.processStepId,
-                    to: nextId,
-                    label
-                });
-            });
-        });
-
-        return { positions, connections };
-    }, [processSteps]);
-
-    const getConnectionPoints = (fromId: string, toId: string) => {
-        if (!visualizationData) return { x1: 0, y1: 0, x2: 0, y2: 0 };
-        
-        const fromPos = visualizationData.positions[fromId];
-        const toPos = visualizationData.positions[toId];
-        
-        if (!fromPos || !toPos) return { x1: 0, y1: 0, x2: 0, y2: 0 };
-        
-        const fromCenterX = fromPos.x + fromPos.width / 2;
-        const fromCenterY = fromPos.y + fromPos.height / 2;
-        const toCenterX = toPos.x + toPos.width / 2;
-        const toCenterY = toPos.y + toPos.height / 2;
-        
-        let x1, y1, x2, y2;
-        
-        if (Math.abs(toCenterX - fromCenterX) > Math.abs(toCenterY - fromCenterY)) {
-            if (toCenterX > fromCenterX) {
-                x1 = fromPos.x + fromPos.width;
-                y1 = fromCenterY;
-                x2 = toPos.x;
-                y2 = toCenterY;
-            } else {
-                x1 = fromPos.x;
-                y1 = fromCenterY;
-                x2 = toPos.x + toPos.width;
-                y2 = toCenterY;
-            }
-        } else {
-            if (toCenterY > fromCenterY) {
-                x1 = fromCenterX;
-                y1 = fromPos.y + fromPos.height;
-                x2 = toCenterX;
-                y2 = toPos.y;
-            } else {
-                x1 = fromCenterX;
-                y1 = fromPos.y;
-                x2 = toCenterX;
-                y2 = toPos.y + toPos.height;
-            }
+    const handleStepClick = (stepId: string) => {
+        // Clear any existing timeout
+        if (glowTimeoutRef.current) {
+            clearTimeout(glowTimeoutRef.current);
         }
         
-        return { x1, y1, x2, y2 };
+        // Set the selected step
+        setSelectedStepId(stepId);
+        
+        // Set timeout to clear selection after 2 seconds
+        glowTimeoutRef.current = setTimeout(() => {
+            setSelectedStepId(null);
+            glowTimeoutRef.current = null;
+        }, 2000);
     };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (glowTimeoutRef.current) {
+                clearTimeout(glowTimeoutRef.current);
+            }
+        };
+    }, []);
+
 
     return (
         <AppLayout breadcrumbs={breadcrumbs}>
@@ -346,15 +303,15 @@ export default function ProcessVisualization() {
                                         {processSteps.map((step, index) => (
                                             <tr 
                                                 key={index} 
-                                                className={`border-t cursor-move ${draggedIndex === index ? 'opacity-50' : ''}`}
+                                                className={`border-t ${draggedIndex === index ? 'opacity-50' : ''} hover:bg-muted/30 transition-all duration-300 ${selectedStepId === step.processStepId ? 'shadow-2xl shadow-blue-500/50 bg-blue-50/30 relative z-10' : ''}`}
                                                 draggable
-                                                onDragStart={() => handleDragStart(index)}
+                                                onDragStart={(e) => handleDragStart(index, e)}
                                                 onDragOver={handleDragOver}
                                                 onDrop={(e) => handleDrop(e, index)}
                                                 onDragEnd={handleDragEnd}
                                             >
-                                                <td className="px-2 py-2 text-center">
-                                                    <span className="text-muted-foreground cursor-move select-none" title="Drag to reorder">
+                                                <td className="px-2 py-2 text-center drag-handle cursor-move">
+                                                    <span className="text-muted-foreground select-none" title="Drag to reorder">
                                                         ⋮⋮
                                                     </span>
                                                 </td>
@@ -363,6 +320,8 @@ export default function ProcessVisualization() {
                                                         value={step.processStepId}
                                                         onChange={(e) => updateProcessStep(index, 'processStepId', e.target.value)}
                                                         className="w-16 h-8 text-xs"
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onDragStart={(e) => e.preventDefault()}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-2">
@@ -370,6 +329,8 @@ export default function ProcessVisualization() {
                                                         value={step.processStepDescription}
                                                         onChange={(e) => updateProcessStep(index, 'processStepDescription', e.target.value)}
                                                         className="min-w-32 h-8 text-xs"
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onDragStart={(e) => e.preventDefault()}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-2">
@@ -377,6 +338,8 @@ export default function ProcessVisualization() {
                                                         value={step.shapeType}
                                                         onChange={(e) => updateProcessStep(index, 'shapeType', e.target.value as ProcessStep['shapeType'])}
                                                         className="w-20 h-8 px-2 text-xs border rounded-md bg-background"
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onDragStart={(e) => e.preventDefault()}
                                                     >
                                                         <option value="Start">Start</option>
                                                         <option value="Process">Process</option>
@@ -389,6 +352,8 @@ export default function ProcessVisualization() {
                                                         value={step.function}
                                                         onChange={(e) => updateProcessStep(index, 'function', e.target.value)}
                                                         className="w-20 h-8 text-xs"
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onDragStart={(e) => e.preventDefault()}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-2">
@@ -399,6 +364,8 @@ export default function ProcessVisualization() {
                                                             onChange={(e) => handleMultiSelectChange(index, e)}
                                                             className="w-24 h-16 px-2 text-xs border rounded-md bg-background"
                                                             size={Math.min(3, getAvailableNextSteps(index).length)}
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onDragStart={(e) => e.preventDefault()}
                                                         >
                                                             {getAvailableNextSteps(index).map(stepId => (
                                                                 <option key={stepId} value={stepId}>{stepId}</option>
@@ -409,6 +376,8 @@ export default function ProcessVisualization() {
                                                             value={step.nextStepIds[0] || ''}
                                                             onChange={(e) => updateNextStepSelection(index, e.target.value, false)}
                                                             className="w-20 h-8 px-2 text-xs border rounded-md bg-background"
+                                                            onMouseDown={(e) => e.stopPropagation()}
+                                                            onDragStart={(e) => e.preventDefault()}
                                                         >
                                                             <option value="">None</option>
                                                             {getAvailableNextSteps(index).map(stepId => (
@@ -424,6 +393,8 @@ export default function ProcessVisualization() {
                                                         placeholder="Yes, No"
                                                         className="w-20 h-8 text-xs"
                                                         disabled={step.shapeType !== 'Decision'}
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onDragStart={(e) => e.preventDefault()}
                                                     />
                                                 </td>
                                                 <td className="px-2 py-2">
@@ -433,6 +404,8 @@ export default function ProcessVisualization() {
                                                         size="sm"
                                                         onClick={() => removeProcessStep(index)}
                                                         className="h-8 w-8 p-0 text-xs"
+                                                        onMouseDown={(e) => e.stopPropagation()}
+                                                        onDragStart={(e) => e.preventDefault()}
                                                     >
                                                         ×
                                                     </Button>
@@ -453,70 +426,16 @@ export default function ProcessVisualization() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            {visualizationData ? (
+                            {processSteps.length > 0 ? (
                                 <div className="space-y-2">
-                                    <div className="p-4 rounded-xl border border-sidebar-border/70 dark:border-sidebar-border bg-white overflow-auto" style={{ minHeight: '400px' }}>
-                                        <svg
-                                            width="800"
-                                            height="600"
-                                            viewBox="0 0 800 600"
-                                            className="w-full h-full"
-                                        >
-                                            <defs>
-                                                <marker
-                                                    id="arrowhead"
-                                                    markerWidth="10"
-                                                    markerHeight="7"
-                                                    refX="9"
-                                                    refY="3.5"
-                                                    orient="auto"
-                                                >
-                                                    <polygon
-                                                        points="0 0, 10 3.5, 0 7"
-                                                        fill="#333"
-                                                    />
-                                                </marker>
-                                            </defs>
-                                            
-                                            {visualizationData.connections.map((connection, index) => {
-                                                const { x1, y1, x2, y2 } = getConnectionPoints(connection.from, connection.to);
-                                                return (
-                                                    <Arrow
-                                                        key={`${connection.from}-${connection.to}-${index}`}
-                                                        x1={x1}
-                                                        y1={y1}
-                                                        x2={x2}
-                                                        y2={y2}
-                                                        label={connection.label}
-                                                    />
-                                                );
-                                            })}
-                                            
-                                            {processSteps.map((step) => {
-                                                const pos = visualizationData.positions[step.processStepId];
-                                                if (!pos) return null;
-                                                
-                                                const ShapeComponent = {
-                                                    Start: StartShape,
-                                                    Process: ProcessShape,
-                                                    Decision: DecisionShape,
-                                                    End: EndShape
-                                                }[step.shapeType];
-                                                
-                                                return (
-                                                    <ShapeComponent
-                                                        key={step.processStepId}
-                                                        id={step.processStepId}
-                                                        text={step.processStepDescription}
-                                                        x={pos.x}
-                                                        y={pos.y}
-                                                        width={pos.width}
-                                                        height={pos.height}
-                                                        function={step.function}
-                                                    />
-                                                );
-                                            })}
-                                        </svg>
+                                    <div className="p-4 rounded-xl border border-sidebar-border/70 dark:border-sidebar-border bg-white overflow-auto">
+                                        <ProcessCanvas 
+                                            processSteps={processSteps}
+                                            width={800}
+                                            height={600}
+                                            onStepClick={handleStepClick}
+                                            selectedStepId={selectedStepId}
+                                        />
                                     </div>
                                     {response && (
                                         <div className="p-4 rounded-xl border border-sidebar-border/70 dark:border-sidebar-border bg-muted/30 max-h-96 overflow-y-auto">
