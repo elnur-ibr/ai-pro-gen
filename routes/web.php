@@ -3,6 +3,8 @@
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\VisualizationController;
+use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProcessController;
 
 Route::get('/', function () {
     return Inertia::render('welcome');
@@ -16,6 +18,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('process-visualization', function () {
         return Inertia::render('process-visualization');
     })->name('process-visualization');
+
+    Route::resource('projects', ProjectController::class);
+    Route::resource('processes', ProcessController::class);
 });
 
 require __DIR__.'/settings.php';
