@@ -75,18 +75,16 @@ export default function CreateProcess({ projects }: Props) {
             }
         ];
 
-        // Prepare final data
-        const finalData = {
-            name: data.name,
-            project_id: data.project_id,
-            visualization_data: data.visualization_data.length > 0 ? data.visualization_data : defaultVisualizationData,
-        };
+        // Set the visualization data if empty
+        if (data.visualization_data.length === 0) {
+            setData('visualization_data', defaultVisualizationData);
+        }
 
         // Debug: Log the form data
-        console.log('Form data being submitted:', finalData);
+        console.log('Form data being submitted:', data);
         
-        // Submit with explicit data
-        post('/processes', finalData, {
+        // Submit the form
+        post('/processes', {
             onSuccess: (page) => {
                 console.log('Form submission successful', page);
             },

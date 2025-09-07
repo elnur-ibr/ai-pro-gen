@@ -38,16 +38,15 @@ class ProcessController extends Controller
     {
         // Debug: Log the incoming request data
         \Log::info('Process store request data:', $request->all());
-        
+
         $request->validate([
-            'name' => 'required|string|max:255',
-            'project_id' => 'required|exists:projects,id',
-            'visualization_data' => 'required|array',
+            'name'               => 'required|string|max:255',
+            'project_id'         => 'required|exists:projects,id',
         ]);
 
         $process = Process::create([
-            'name' => $request->name,
-            'project_id' => $request->project_id,
+            'name'               => $request->name,
+            'project_id'         => $request->project_id,
             'visualization_data' => $request->visualization_data,
         ]);
 
@@ -76,7 +75,7 @@ class ProcessController extends Controller
         $projects = Project::all();
         $process->load('project');
         return Inertia::render('processes/edit', [
-            'process' => $process,
+            'process'  => $process,
             'projects' => $projects
         ]);
     }
@@ -87,14 +86,14 @@ class ProcessController extends Controller
     public function update(Request $request, Process $process)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'project_id' => 'required|exists:projects,id',
+            'name'               => 'required|string|max:255',
+            'project_id'         => 'required|exists:projects,id',
             'visualization_data' => 'required|array',
         ]);
 
         $process->update([
-            'name' => $request->name,
-            'project_id' => $request->project_id,
+            'name'               => $request->name,
+            'project_id'         => $request->project_id,
             'visualization_data' => $request->visualization_data,
         ]);
 
